@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Amortização Ótima de Empréstimos Consignados</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+  <div class="container py-4">
+    <h1 class="mb-4">Simulador de Amortização Ótima de Empréstimos Consignados</h1>
+    <div class="mb-3 row">
+      <label for="valorDisponivel" class="col-sm-3 col-form-label">Valor disponível para amortização (R$):</label>
+      <div class="col-sm-3">
+        <input type="number" class="form-control" id="valorDisponivel" value="10000" min="0" step="0.01">
+      </div>
+    </div>
+    <h5>Empréstimos</h5>
+    <table class="table table-bordered align-middle" id="tabelaEmprestimos">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Valor Original (R$)</th>
+          <th>Nº Parcelas</th>
+          <th>Valor Parcela (R$)</th>
+          <th>Parcelas Pagas</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
+          <td><input type="number" class="form-control" value="" min="1"></td>
+          <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
+          <td><input type="number" class="form-control" value="0" min="0"></td>
+          <td><button type="button" class="btn btn-danger btn-sm btn-remover">Remover</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <button class="btn btn-primary mb-4" id="btnAdicionar">Adicionar Empréstimo</button>
+    <button class="btn btn-success mb-4" id="btnCalcular">Calcular Melhor Amortização</button>
+    <div id="resultado"></div>
+  </div>
+  <script>
+    $(document).ready(function() {
+      function atualizarNumeracao() {
+        $('#tabelaEmprestimos tbody tr').each(function(i, tr) {
+          $(tr).find('td:first').text(i+1);
+        });
+      }
+
+      // Adicionar novo empréstimo
+      $('#btnAdicionar').click(function() {
+        let idx = $('#tabelaEmprestimos tbody tr').length + 1;
+        let novaLinha = `<tr>
+          <td>${idx}</td>
+          <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
+          <td><input type="number" class="form-control" value="" min="1"></td>
+          <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
+          <td><input type="number" class="form-control" value="0" min="0"></td>
+          <td><button type="button" class="btn btn-danger btn-sm btn-remover">Remover</button></td>
+        </tr>`;
+        $('#tabelaEmprestimos tbody').append(novaLinha);
+        atualizarNumeracao();
+      });
+
+      // Remover empréstimo
+      $('#tabelaEmprestimos').on('click', '.btn-remover', function() {
+        if ($('#tabelaEmprestimos tbody tr').length > 1) {
+          $(this).closest('tr').remove();
+          atualizarNumeracao();
+        } else {
+          alert('Deve haver pelo menos um empréstimo na lista.');
+        }
+      });
+
+      $('#btnCalcular').click(function() {
+        // 1. Ler valor disponível
+        let valorDisponivel = parseFloat($('#valorDisponivel').val()) || 0;
+        
+        // 2. Ler empréstimos
+        let emprestimos = [];
+        $('#tabelaEmprestimos tbody tr').each(function(i, tr) {
+          let tds = $(tr).find('td');
+          let valorOriginal = parseFloat($(tds[1]).find('input').val());
+          let numParcelas = parseInt($(tds[2]).find('input').val());
+          let valorParcela = parseFloat($(tds[3]).find('input').val());
+          let parcelasPagas = parseInt($(tds[4]).find('input').val());
+          // Só adiciona se todos os campos forem válidos
+          if (
+            !isNaN(valorOriginal) && valorOriginal > 0 &&
+            !isNaN(numParcelas) && numParcelas > 0 &&
+            !isNaN(valorParcela) && valorParcela > 0 &&
+            !isNaN(parcelasPagas) && parcelasPagas >= 0 &&
+            parcelasPagas < numParcelas
+          ) {
+            // Calcular taxa de juros efetiva (busca binária)
+            function calcularTaxaJuros(PV, P, n) {
+              let min = 0.000001, max = 2, tol = 1e-8, taxa = 0;
+              for (let iter = 0; iter < 100; iter++) {
+                let i = (min + max) / 2;
+                let parcelaCalc = PV * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
+                if (Math.abs(parcelaCalc - P) < tol) {
+                  taxa = i;
+                  break;
+                }
+                if (parcelaCalc > P) {
+                  max = i;
+                } else {
+                  min = i;
+                }
+                taxa = i;
+              }
+              return taxa;
+            }
+            let taxaJuros = calcularTaxaJuros(valorOriginal, valorParcela, numParcelas);
+
+            // Gerar tabela Price de amortizações
+            let saldo = valorOriginal;
+            let amortizacoes = [];
+            for (let k = 1; k <= numParcelas; k++) {
+              let juros = saldo * taxaJuros;
+              let amortizacao = valorParcela - juros;
+              amortizacoes.push(amortizacao);
+              saldo -= amortizacao;
+            }
+            let saldoDevedor = valorOriginal;
+            for (let k = 0; k < parcelasPagas; k++) {
+              saldoDevedor -= amortizacoes[k];
+            }
+            let parcelasRestantes = numParcelas - parcelasPagas;
+            emprestimos.push({
+              idx: i+1,
+              valorOriginal,
+              numParcelas,
+              valorParcela,
+              parcelasPagas,
+              saldoDevedor,
+              parcelasRestantes,
+              amortizacoes,
+              taxaJuros,
+              parcelasAdiantadas: 0
+            });
+          }
+        });
+        if (emprestimos.length === 0) {
+          $('#resultado').html('<div class="alert alert-warning">Preencha corretamente os dados dos empréstimos para calcular.</div>');
+          return;
+        }
+
+        // 3. Ordenar por valor da parcela (maior para menor)
+        emprestimos.sort((a, b) => b.valorParcela - a.valorParcela);
+
+        // 4. Distribuir valor disponível usando amortizações
+        let valorRestante = valorDisponivel;
+        for (let emp of emprestimos) {
+          let adiantadas = 0;
+          let amortizacoesRestantes = emp.amortizacoes.slice(emp.parcelasPagas);
+          for (let k = 0; k < amortizacoesRestantes.length; k++) {
+            let valorAmortizacao = amortizacoesRestantes[k];
+            if (valorRestante >= valorAmortizacao) {
+              valorRestante -= valorAmortizacao;
+              adiantadas++;
+            } else {
+              break;
+            }
+          }
+          emp.parcelasAdiantadas = adiantadas;
+          // Saldo devedor final após adiantamento
+          let totalAmortizado = emp.amortizacoes.slice(emp.parcelasPagas, emp.parcelasPagas + adiantadas).reduce((a, b) => a + b, 0);
+          emp.saldoDevedorFinal = emp.saldoDevedor - totalAmortizado;
+        }
+
+        // 5. Voltar à ordem original
+        emprestimos.sort((a, b) => a.idx - b.idx);
+
+        // 6. Exibir resultado
+        let html = '<h5>Resultado da Amortização Ótima</h5>';
+        html += '<table class="table table-striped"><thead><tr>' +
+          '<th>#</th><th>Parcelas Adiantadas</th><th>Valor Usado (R$)</th><th>Saldo Devedor Final (R$)</th><th>Parcelas Restantes</th><th>Valor Total Restante (R$)</th><th>Valor Sem Adiantamento (R$)</th><th>Economia ao Adiantar (R$)</th><th>Taxa de Juros Efetiva (%)<br><small>Mensal / Anual</small></th>' +
+          '</tr></thead><tbody>';
+        let totalUsado = 0;
+        let somaValorTotalRestante = 0;
+        let valorInicialTomado = 0;
+        let totalJaPago = 0;
+        let totalEconomia = 0;
+        for (let emp of emprestimos) {
+          let valorUsado = emp.amortizacoes.slice(emp.parcelasPagas, emp.parcelasPagas + emp.parcelasAdiantadas).reduce((a, b) => a + b, 0);
+          totalUsado += valorUsado;
+          let saldoFinal = typeof emp.saldoDevedorFinal === 'number' ? emp.saldoDevedorFinal : emp.saldoDevedor;
+          let taxaMensal = emp.taxaJuros * 100;
+          let taxaAnual = (Math.pow(1 + emp.taxaJuros, 12) - 1) * 100;
+          let parcelasRestantes = emp.numParcelas - emp.parcelasPagas - emp.parcelasAdiantadas;
+          let valorTotalRestante = parcelasRestantes * emp.valorParcela;
+          somaValorTotalRestante += valorTotalRestante;
+          valorInicialTomado += emp.valorOriginal;
+          totalJaPago += emp.parcelasPagas * emp.valorParcela;
+          let valorNormalParcelasAdiantadas = emp.parcelasAdiantadas * emp.valorParcela;
+          let economia = valorNormalParcelasAdiantadas - valorUsado;
+          totalEconomia += economia;
+          let valorSemAdiantamento = (emp.parcelasAdiantadas + parcelasRestantes) * emp.valorParcela;
+          html += `<tr><td>${emp.idx}</td><td>${emp.parcelasAdiantadas}</td><td>${valorUsado.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${saldoFinal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${parcelasRestantes}</td><td>${valorTotalRestante.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${valorSemAdiantamento.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${economia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${taxaMensal.toLocaleString('pt-BR', {maximumFractionDigits:4})}%<br><small>${taxaAnual.toLocaleString('pt-BR', {maximumFractionDigits:4})}%</small></td></tr>`;
+        }
+        html += '</tbody></table>';
+        let valorFinalAPagar = somaValorTotalRestante + totalJaPago + totalUsado;
+        html += `<div><strong>Total usado:</strong> R$ ${totalUsado.toLocaleString('pt-BR', {minimumFractionDigits:2})} <br>`;
+        html += `<strong>Valor restante:</strong> R$ ${(valorDisponivel - totalUsado).toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
+        html += `<strong>Soma do Valor Total Restante:</strong> R$ ${somaValorTotalRestante.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
+        html += `<strong>Valor inicial tomado:</strong> R$ ${valorInicialTomado.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
+        html += `<strong>Valor final a ser pago:</strong> R$ ${valorFinalAPagar.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
+        html += `<strong>Diferença (juros/custo total):</strong> R$ ${(valorFinalAPagar - valorInicialTomado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>`;
+        $('#resultado').html(html);
+      });
+    });
+  </script>
+</body>
+</html> 
