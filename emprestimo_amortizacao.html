@@ -26,6 +26,7 @@
           <th>Nº Parcelas</th>
           <th>Valor Parcela (R$)</th>
           <th>Parcelas Pagas</th>
+          <th>Última Parcela (de trás pra frente) Paga</th>
           <th>Ações</th>
         </tr>
       </thead>
@@ -35,7 +36,8 @@
           <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
           <td><input type="number" class="form-control" value="" min="1"></td>
           <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
-          <td><input type="number" class="form-control" value="0" min="0"></td>
+          <td><input type="number" class="form-control" value="" min="0"></td>
+          <td><input type="number" class="form-control" value="" min="0"></td>
           <td><button type="button" class="btn btn-danger btn-sm btn-remover">Remover</button></td>
         </tr>
       </tbody>
@@ -60,6 +62,7 @@
           <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
           <td><input type="number" class="form-control" value="" min="1"></td>
           <td><input type="number" class="form-control" value="" min="0" step="0.01"></td>
+          <td><input type="number" class="form-control" value="0" min="0"></td>
           <td><input type="number" class="form-control" value="0" min="0"></td>
           <td><button type="button" class="btn btn-danger btn-sm btn-remover">Remover</button></td>
         </tr>`;
@@ -89,13 +92,17 @@
           let numParcelas = parseInt($(tds[2]).find('input').val());
           let valorParcela = parseFloat($(tds[3]).find('input').val());
           let parcelasPagas = parseInt($(tds[4]).find('input').val());
+          let ultimaParcelaPaga = parseInt($(tds[5]).find('input').val());
+          // Corrigir leitura: se for NaN, considerar 0
+          if (isNaN(ultimaParcelaPaga)) ultimaParcelaPaga = 0;
           // Só adiciona se todos os campos forem válidos
           if (
             !isNaN(valorOriginal) && valorOriginal > 0 &&
             !isNaN(numParcelas) && numParcelas > 0 &&
             !isNaN(valorParcela) && valorParcela > 0 &&
             !isNaN(parcelasPagas) && parcelasPagas >= 0 &&
-            parcelasPagas < numParcelas
+            parcelasPagas < numParcelas &&
+            !isNaN(ultimaParcelaPaga) && ultimaParcelaPaga >= 0 && ultimaParcelaPaga < numParcelas
           ) {
             // Calcular taxa de juros efetiva (busca binária)
             function calcularTaxaJuros(PV, P, n) {
@@ -121,17 +128,28 @@
             // Gerar tabela Price de amortizações
             let saldo = valorOriginal;
             let amortizacoes = [];
-            for (let k = 1; k <= numParcelas; k++) {
+            for (let k = 0; k < numParcelas; k++) {
               let juros = saldo * taxaJuros;
               let amortizacao = valorParcela - juros;
               amortizacoes.push(amortizacao);
               saldo -= amortizacao;
             }
+            console.log('Amortizações para empréstimo', i+1, amortizacoes);
             let saldoDevedor = valorOriginal;
             for (let k = 0; k < parcelasPagas; k++) {
               saldoDevedor -= amortizacoes[k];
             }
             let parcelasRestantes = numParcelas - parcelasPagas;
+            // Calculate pending installments considering both initial paid installments and last paid installment from end
+            let parcelasPendentes = [];
+            for (let k = 0; k < numParcelas; k++) {
+              // Skip if it's one of the initial paid installments
+              if (k < parcelasPagas) continue;
+              // Skip if it's one of the last paid installments (from end), which is the last one -1 because it's 1-based and we want to skip the last one
+              if (ultimaParcelaPaga > 0 && k > ultimaParcelaPaga-2) continue;
+              parcelasPendentes.push(k);
+            }
+            console.log('Parcelas pendentes', parcelasPendentes);
             emprestimos.push({
               idx: i+1,
               valorOriginal,
@@ -140,9 +158,11 @@
               parcelasPagas,
               saldoDevedor,
               parcelasRestantes,
+              parcelasPendentes,
               amortizacoes,
               taxaJuros,
-              parcelasAdiantadas: 0
+              parcelasAdiantadas: 0,
+              ultimaParcelaPaga
             });
           }
         });
@@ -151,44 +171,81 @@
           return;
         }
 
-        // 3. Ordenar por valor da parcela (maior para menor)
-        emprestimos.sort((a, b) => b.valorParcela - a.valorParcela);
-
-        // 4. Distribuir valor disponível usando amortizações
-        let valorRestante = valorDisponivel;
-        for (let emp of emprestimos) {
-          let adiantadas = 0;
-          let amortizacoesRestantes = emp.amortizacoes.slice(emp.parcelasPagas);
-          for (let k = 0; k < amortizacoesRestantes.length; k++) {
-            let valorAmortizacao = amortizacoesRestantes[k];
-            if (valorRestante >= valorAmortizacao) {
-              valorRestante -= valorAmortizacao;
-              adiantadas++;
-            } else {
-              break;
-            }
+        // Ajustar cálculo para considerar a última parcela (de trás pra frente) paga
+        // e amortizar as próximas parcelas de trás para frente
+        let parcelasAmortizadasDetalhe = emprestimos.map(() => []);
+        let parcelasPossiveis = [];
+        emprestimos.forEach((emp, empIdx) => {
+          let n = emp.numParcelas;
+          let pagasInicio = emp.parcelasPagas;
+          let ultimaParcelaFim = emp.ultimaParcelaPaga;
+          if (isNaN(ultimaParcelaFim)) ultimaParcelaFim = 0;
+          if (isNaN(pagasInicio)) pagasInicio = 0;
+          // Função para checar se uma parcela já foi paga
+          function isParcelaPaga(k, pagasInicio, ultimaParcelaFim, n) {
+            if (k < pagasInicio) return true;
+            if (ultimaParcelaFim > 0 && (k + 1) >= ultimaParcelaFim) return true;
+            return false;
           }
-          emp.parcelasAdiantadas = adiantadas;
-          // Saldo devedor final após adiantamento
-          let totalAmortizado = emp.amortizacoes.slice(emp.parcelasPagas, emp.parcelasPagas + adiantadas).reduce((a, b) => a + b, 0);
-          emp.saldoDevedorFinal = emp.saldoDevedor - totalAmortizado;
+
+          if(ultimaParcelaFim > 0) {
+            n = ultimaParcelaFim - 1;
+          }
+          // Para cada parcela disponível, calcular o valor presente (PV) para quitá-la
+          for (let k of emp.parcelasPendentes) {
+            let mesesAteParcela = k - emp.parcelasPagas + 1;
+            if (mesesAteParcela < 1) continue;
+            let valorPresente = emp.valorParcela / Math.pow(1 + emp.taxaJuros, mesesAteParcela);
+            let economia = emp.valorParcela - valorPresente;
+            parcelasPossiveis.push({
+              empIdx,
+              parcelaIdx: k,
+              numeroRealParcela: k + 1,
+              valorPresente,
+              economia,
+              valorParcela: emp.valorParcela,
+              pagasFim: ultimaParcelaFim,
+              pagasInicio,
+              numParcelas: n
+            });
+          }
+        });
+        // Ordenar todas as próximas parcelas pelo maior valor economizado
+        parcelasPossiveis.sort((a, b) => b.economia - a.economia);
+        let valorRestante = valorDisponivel;
+        emprestimos.forEach(emp => emp.parcelasAdiantadas = 0);
+        for (let i = 0; i < parcelasPossiveis.length; i++) {
+          let p = parcelasPossiveis[i];
+          if (valorRestante >= p.valorPresente) {
+            valorRestante -= p.valorPresente;
+            emprestimos[p.empIdx].parcelasAdiantadas++;
+            parcelasAmortizadasDetalhe[p.empIdx].push(p);
+          }
         }
+        // Atualizar saldo devedor final de cada empréstimo
+        emprestimos.forEach((emp, empIdx) => {
+          let totalAmortizado = parcelasAmortizadasDetalhe[empIdx].reduce((a, b) => a + b.valorPresente, 0);
+          emp.saldoDevedorFinal = emp.saldoDevedor - totalAmortizado;
+        });
 
         // 5. Voltar à ordem original
         emprestimos.sort((a, b) => a.idx - b.idx);
+        parcelasAmortizadasDetalhe = emprestimos.map((_, i) => parcelasAmortizadasDetalhe[i]);
 
         // 6. Exibir resultado
         let html = '<h5>Resultado da Amortização Ótima</h5>';
         html += '<table class="table table-striped"><thead><tr>' +
-          '<th>#</th><th>Parcelas Adiantadas</th><th>Valor Usado (R$)</th><th>Saldo Devedor Final (R$)</th><th>Parcelas Restantes</th><th>Valor Total Restante (R$)</th><th>Valor Sem Adiantamento (R$)</th><th>Economia ao Adiantar (R$)</th><th>Taxa de Juros Efetiva (%)<br><small>Mensal / Anual</small></th>' +
+          '<th>#</th><th>Parcelas Adiantadas</th><th>Valor Usado (R$)</th><th>Saldo Devedor Final (R$)</th><th>Parcelas Restantes</th><th>Valor Total Restante (R$)</th><th>Valor Sem Adiantamento (R$)</th><th>Economia ao Adiantar (R$)</th><th>Taxa de Juros Efetiva (%)<br><small>Mensal / Anual</small></th><th></th>' +
           '</tr></thead><tbody>';
         let totalUsado = 0;
         let somaValorTotalRestante = 0;
         let valorInicialTomado = 0;
         let totalJaPago = 0;
         let totalEconomia = 0;
-        for (let emp of emprestimos) {
-          let valorUsado = emp.amortizacoes.slice(emp.parcelasPagas, emp.parcelasPagas + emp.parcelasAdiantadas).reduce((a, b) => a + b, 0);
+        let expandData = [];
+        for (let empIdx = 0; empIdx < emprestimos.length; empIdx++) {
+          let emp = emprestimos[empIdx];
+          let valorUsado = parcelasAmortizadasDetalhe[empIdx].reduce((a, b) => a + b.valorPresente, 0);
           totalUsado += valorUsado;
           let saldoFinal = typeof emp.saldoDevedorFinal === 'number' ? emp.saldoDevedorFinal : emp.saldoDevedor;
           let taxaMensal = emp.taxaJuros * 100;
@@ -202,17 +259,73 @@
           let economia = valorNormalParcelasAdiantadas - valorUsado;
           totalEconomia += economia;
           let valorSemAdiantamento = (emp.parcelasAdiantadas + parcelasRestantes) * emp.valorParcela;
-          html += `<tr><td>${emp.idx}</td><td>${emp.parcelasAdiantadas}</td><td>${valorUsado.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${saldoFinal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${parcelasRestantes}</td><td>${valorTotalRestante.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${valorSemAdiantamento.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${economia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${taxaMensal.toLocaleString('pt-BR', {maximumFractionDigits:4})}%<br><small>${taxaAnual.toLocaleString('pt-BR', {maximumFractionDigits:4})}%</small></td></tr>`;
+          // Salvar dados para expandir
+          expandData.push({empIdx, emp, parcelasAmortizadas: parcelasAmortizadasDetalhe[empIdx]});
+          html += `<tr><td>${emp.idx}</td><td>${emp.parcelasAdiantadas}</td><td>${valorUsado.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${saldoFinal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${parcelasRestantes}</td><td>${valorTotalRestante.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${valorSemAdiantamento.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${economia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${taxaMensal.toLocaleString('pt-BR', {maximumFractionDigits:4})}%<br><small>${taxaAnual.toLocaleString('pt-BR', {maximumFractionDigits:4})}%</small></td><td><button class='btn btn-link btn-expandir' data-empidx='${empIdx}'>Expandir</button></td></tr>`;
+          // Detalhamento das parcelas amortizadas (indentado)
+          if (parcelasAmortizadasDetalhe[empIdx].length > 0) {
+            let n = emprestimos[empIdx].numParcelas;
+            let pagasFim = emprestimos[empIdx].ultimaParcelaPaga;
+            let pagasInicio = emprestimos[empIdx].parcelasPagas;
+            if (isNaN(pagasFim)) pagasFim = 0;
+            if (isNaN(pagasInicio)) pagasInicio = 0;
+            let parcelasOrdenadas = parcelasAmortizadasDetalhe[empIdx].slice().sort((a, b) => b.parcelaIdx - a.parcelaIdx);
+            parcelasOrdenadas.forEach((p, idx) => {
+              html += `<tr><td></td><td colspan=\"9\" style=\"padding-left: 2em; font-size: 0.95em; background: #f8f9fa;\">↳ Parcela ${p.numeroRealParcela} do contrato: Valor para quitar = R$ ${p.valorPresente.toLocaleString('pt-BR', {minimumFractionDigits:2})}, Economia = R$ ${p.economia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td></tr>`;
+            });
+          }
         }
         html += '</tbody></table>';
+        // Área para expandir detalhes
+        html += `<div id='expand-area'></div>`;
+
         let valorFinalAPagar = somaValorTotalRestante + totalJaPago + totalUsado;
         html += `<div><strong>Total usado:</strong> R$ ${totalUsado.toLocaleString('pt-BR', {minimumFractionDigits:2})} <br>`;
         html += `<strong>Valor restante:</strong> R$ ${(valorDisponivel - totalUsado).toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
         html += `<strong>Soma do Valor Total Restante:</strong> R$ ${somaValorTotalRestante.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
         html += `<strong>Valor inicial tomado:</strong> R$ ${valorInicialTomado.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
         html += `<strong>Valor final a ser pago:</strong> R$ ${valorFinalAPagar.toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
-        html += `<strong>Diferença (juros/custo total):</strong> R$ ${(valorFinalAPagar - valorInicialTomado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>`;
+        html += `<strong>Diferença (juros/custo total):</strong> R$ ${(valorFinalAPagar - valorInicialTomado).toLocaleString('pt-BR', {minimumFractionDigits:2})}<br>`;
+        html += `<strong>Total economizado com adiantamentos:</strong> R$ ${totalEconomia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</div>`;
         $('#resultado').html(html);
+
+        // Função para expandir detalhes das parcelas
+        $('.btn-expandir').off('click').on('click', function() {
+          let empIdx = $(this).data('empidx');
+          let emp = expandData[empIdx].emp;
+          console.log(emp);
+          let n = emp.numParcelas;
+          let pagasInicio = emp.parcelasPagas;
+          let pagasFim = emp.ultimaParcelaPaga;
+          if (isNaN(pagasInicio)) pagasInicio = 0;
+          if (isNaN(pagasFim)) pagasFim = 0;
+          let parcelasAdiantadasSet = new Set((expandData[empIdx].parcelasAmortizadas || []).map(p => p.parcelaIdx));
+          let htmlExpand = `<h6>Detalhamento das parcelas do empréstimo #${emp.idx}</h6>`;
+          htmlExpand += `<table class='table table-sm'><thead><tr><th>Parcela</th><th>Valor para Quitar (R$)</th><th>Economia (R$)</th><th>Status</th></tr></thead><tbody>`;
+          for (let k = n - 1; k >= 0; k--) {
+            let mesesAteParcela = k - pagasInicio + 1;
+            let valorPresente = mesesAteParcela >= 1 ? emp.valorParcela / Math.pow(1 + emp.taxaJuros, mesesAteParcela) : 0;
+            let economia = mesesAteParcela >= 1 ? emp.valorParcela - valorPresente : 0;
+            let status = '';
+            let style = '';
+
+            if (k < pagasInicio) {
+              status = 'Paga (início)';
+              style = '--bs-table-bg: #d4edda;'; // verde
+            } else if (k >= pagasFim-1) {
+              status = 'Paga (fim)';
+              style = '--bs-table-bg: #d4edda;'; // verde
+            } else if (parcelasAdiantadasSet.has(k)) {
+              status = 'Adiantada';
+              style = '--bs-table-bg: #cce5ff;'; // azul
+            } else {
+              status = 'Disponível';
+            }
+            htmlExpand += `<tr style='${style}'><td>${k+1}</td><td>${valorPresente.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${economia.toLocaleString('pt-BR', {minimumFractionDigits:2})}</td><td>${status}</td></tr>`;
+          }
+          htmlExpand += '</tbody></table>';
+          $('#expand-area').html(htmlExpand);
+        });
       });
     });
   </script>
