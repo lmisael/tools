@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top 20 AI Concepts You Should Know</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        h2, h3, h4, h5, h6 {
+            margin-top: 20px;
+        }
+        .topic, .subtopic {
+            margin-bottom: 10px;
+        }
+        .links {
+            margin-left: 20px;
+        }
+        .indent {
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Top 20 AI Concepts You Should Know</h1>
+    <div id="content"></div>
+
+    <script>
+        const topics = {
+            "Machine Learning": {
+                "Core Algorithms": {},
+                "Statistics for ML": {},
+                "Model Training Techniques": {},
+                "Bias and Variance": {},
+                "Cross-Validation": {}
+            },
+            "Deep Learning": {
+                "Hierarchical Neural Networks": {},
+                "Backpropagation": {},
+                "Activation Functions": {},
+                "Convolutional Layers": {},
+                "Regularization (Dropout, BatchNorm)": {}
+            },
+            "Neural Networks": {
+                "Feedforward Networks": {},
+                "Recurrent Neural Networks (RNNs)": {},
+                "Convolutional Neural Networks (CNNs)": {},
+                "Graph Neural Networks (GNNs)": {}
+            },
+            "Natural Language Processing (NLP)": {
+                "Text Preprocessing": {},
+                "Tokenization": {},
+                "Word Embeddings": {},
+                "Named Entity Recognition (NER)": {},
+                "Text Classification": {}
+            },
+            "Computer Vision": {
+                "Image Classification": {},
+                "Object Detection": {},
+                "Image Segmentation": {},
+                "Image Generation (GANs)": {}
+            },
+            "Reinforcement Learning": {
+                "Markov Decision Processes": {},
+                "Q-Learning": {},
+                "Policy Gradient Methods": {},
+                "Multi-Agent Systems": {}
+            },
+            "Generative Models": {
+                "GANs (Generative Adversarial Networks)": {},
+                "VAEs (Variational Autoencoders)": {},
+                "Diffusion Models": {},
+                "Data Augmentation": {}
+            },
+            "Large Language Models (LLMs)": {
+                "Transformer Architectures": {},
+                "Fine-Tuning LLMs": {},
+                "Tokenization Strategies": {},
+                "In-Context Learning": {}
+            },
+            "Transformers": {
+                "Self-Attention Mechanism": {},
+                "Positional Encoding": {},
+                "Encoder-Decoder Structures": {},
+                "Transformer Variants (BERT, GPT, T5)": {}
+            },
+            "Feature Engineering": {
+                "Feature Selection": {},
+                "Feature Extraction": {},
+                "Dimensionality Reduction": {},
+                "Feature Scaling": {}
+            },
+            "Supervised Learning": {
+                "Regression": {},
+                "Classification": {},
+                "Decision Trees": {},
+                "Random Forests": {}
+            },
+            "Bayesian Learning": {
+                "Bayesian Inference": {},
+                "Naive Bayes Classifier": {},
+                "Bayesian Networks": {},
+                "Bayesian Optimization": {}
+            },
+            "Prompt Engineering": {
+                "Prompt Templates": {},
+                "Zero-Shot Prompting": {},
+                "Few-Shot Learning": {},
+                "Prompt Chaining": {}
+            },
+            "AI Agents": {
+                "Autonomous Decision Making": {},
+                "Perception Modules": {},
+                "Planning Algorithms": {},
+                "Multi-Agent Collaboration": {}
+            },
+            "Fine-Tuning Models": {
+                "Transfer Learning": {},
+                "Domain Adaptation": {},
+                "Hyperparameter Tuning": {},
+                "Early Stopping": {}
+            },
+            "Multimodal Models": {
+                "Text-to-Image Models": {},
+                "Vision-Language Models": {},
+                "Audio-Visual Models": {},
+                "Cross-Modal Retrieval": {}
+            },
+            "Embeddings": {
+                "Word2Vec": {},
+                "GloVe": {},
+                "BERT Embeddings": {},
+                "Sentence Transformers": {}
+            },
+            "Vector Search": {
+                "Approximate Nearest Neighbor (ANN) Search": {},
+                "FAISS Library": {},
+                "Pinecone": {},
+                "Milvus": {}
+            },
+            "Model Evaluation": {
+                "Accuracy, Precision, Recall, F1-Score": {},
+                "ROC-AUC": {},
+                "Confusion Matrix": {},
+                "Cross-Validation Techniques": {}
+            },
+            "AI Infrastructure": {
+                "Model Deployment Pipelines": {},
+                "Scaling ML Workloads": {},
+                "MLOps Practices": {},
+                "Serving Models in Production": {}
+            }
+        };
+
+        function createLinks(topic, item) {
+            const google = `https://www.google.com/search?q=${encodeURIComponent(topic)}+${encodeURIComponent(item)}`;
+            const googleImages = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(topic)}+${encodeURIComponent(item)}`;
+            const googleBooks = `https://www.google.com/search?tbm=bks&q=${encodeURIComponent(topic)}+${encodeURIComponent(item)}`;
+            const youtube = `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}+${encodeURIComponent(item)}`;
+
+            return `
+                <div class="links">
+                    <a href="${google}" target="_blank">Google</a> |
+                    <a href="${googleImages}" target="_blank">Google Images</a> |
+                    <a href="${googleBooks}" target="_blank">Google Books</a> |
+                    <a href="${youtube}" target="_blank">YouTube</a>
+                </div>
+            `;
+        }
+
+        function createTopicHTML(topic, subtopics, level = 2) {
+            let html = `<h${level}>${topic}</h${level}>`;
+            for (const [subtopic, nestedSubtopics] of Object.entries(subtopics)) {
+                html += `<div class="subtopic indent">${subtopic} ${createLinks(topic, subtopic)}`;
+                if (Object.keys(nestedSubtopics).length > 0) {
+                    html += createTopicHTML(subtopic, nestedSubtopics, level + 1);
+                }
+                html += `</div>`;
+            }
+            return html;
+        }
+
+        function generateContent() {
+            const contentDiv = document.getElementById('content');
+            for (const [topic, subtopics] of Object.entries(topics)) {
+                const topicDiv = document.createElement('div');
+                topicDiv.className = 'topic';
+                topicDiv.innerHTML = createTopicHTML(topic, subtopics);
+                contentDiv.appendChild(topicDiv);
+            }
+        }
+
+        generateContent();
+    </script>
+</body>
+</html>
